@@ -1,0 +1,372 @@
+{
+  "name": "Fluxo de Investimentos - DIO",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        624,
+        -32
+      ],
+      "id": "fde50d14-5d71-4209-b3e4-f78c398d549f",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        48,
+        -32
+      ],
+      "id": "1d1648d9-c38d-471f-8229-1eecabd3a5c9",
+      "name": "Dados clientes",
+      "webhookId": "ed6239bc-f16f-46ed-876a-df222a097c69"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        96
+      ],
+      "id": "ee33a3b3-780f-481d-a108-364ee481de57",
+      "name": "Tipos Investimentos"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega o CSV como texto vindo do HTTP Request\nconst csvRaw = $json.data ?? $json.body ?? $json;\nconst text = (typeof csvRaw === \"string\") ? csvRaw :\nJSON.stringify(csvRaw);\n\nconst lines = text.split(/\\r?\\n/).map(l => l.trim() ).filter(Boolean);\nconst headers = lines[0].split(\",\").map( h => h.trim());\n\nconst investimentos = lines.slice(1).map(line => {\n  const cols = line.split(\",\").map(c => c.trim());\n  const obj = {};\n  headers.forEach((h, i) => obj[h] = cols[i] ?? \"\");\n  \n  // normaliza minimo para numero\n  obj.minimo = Number(String(obj.minimo).replace(/[^\\d]/g, \"\")) || 0;\n  \n  return obj;\n});\n\nreturn [{ json: { investimentos } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "id": "5326c508-9cf5-4438-ae50-af8461e1e48c",
+      "name": "Json dos tipos de investimento"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clientes = $json.body.clientes || [];\n\nconst resultados = clientes.map(cliente => {\n\n  const saldo_num = Number(\n    cliente.saldo\n      .replace(\"R$\", \"\")\n      .replace(/\\./g, \"\")\n      .replace(\",\", \".\")\n      .trim()\n  );\n\n  let recomendacao = {};\n\n  switch (cliente.perfil) {\n\n    case \"Conservador\":\n      recomendacao = {\n        perfil: \"Conservador\",\n        produto: \"CDB Liquidez Diária\",\n        minimo: 1000,\n        rentabilidade: \"12.5%\",\n      };\n      break;\n\n    case \"Moderado\":\n      recomendacao = {\n        perfil: \"Moderado\",\n        produto: \"CDB Prefixado\",\n        minimo: 1000,\n        rentabilidade: \"14.0%\",\n      };\n      break;\n\n    case \"Arrojado\":\n      recomendacao = {\n        perfil: \"Arrojado\",\n        produto: \"ETF de Ações\",\n        minimo: 5000,\n        rentabilidade: \"Potencial elevado\",\n      };\n      break;\n  }\n\n  recomendacao.motivo =\n    saldo_num >= recomendacao.minimo\n      ? \"saldo_ok\"\n      : \"saldo_insuficiente\";\n\n  const mensagens = [\n    `Olá ${cliente.nome}! Pelo seu perfil (${cliente.perfil}), uma boa opção é **${recomendacao.produto}** (mínimo R$ ${recomendacao.minimo.toLocaleString(\"pt-BR\")}). Com seu saldo atual (${cliente.saldo}), você ${\n      saldo_num >= recomendacao.minimo ? \"já consegue\" : \"ainda não consegue\"\n    } investir. Rentabilidade: ${recomendacao.rentabilidade}.`,\n\n    `Oi ${cliente.nome}! Recomendação para perfil ${cliente.perfil}: **${recomendacao.produto}** (mínimo R$ ${recomendacao.minimo.toLocaleString(\"pt-BR\")}). Seu saldo (${cliente.saldo}) ${\n      saldo_num >= recomendacao.minimo ? \"já atende\" : \"não atende\"\n    } o mínimo. Rentabilidade: ${recomendacao.rentabilidade}.`,\n\n    `${cliente.nome}, indo direto ao ponto: para o perfil ${cliente.perfil}, sugerimos **${recomendacao.produto}** (mínimo R$ ${recomendacao.minimo.toLocaleString(\"pt-BR\")}). Você tem ${cliente.saldo}, então ${\n      saldo_num >= recomendacao.minimo ? \"dá para aplicar\" : \"ainda falta saldo\"\n    }. Rentabilidade: ${recomendacao.rentabilidade}.`\n  ];\n\n  const mensagem_escolhida = mensagens[1];\n\n  return {\n    nome: cliente.nome,\n    email: cliente.email,\n    perfil: cliente.perfil,\n    saldo_texto: cliente.saldo,\n    saldo_num,\n    recomendacao,\n    mensagens,\n    mensagem_escolhida\n  };\n\n});\n\nreturn [\n  {\n    json: {\n      ok: true,\n      total_clientes: clientes.length,\n      total_investimentos: 3,\n      resultados\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        96
+      ],
+      "id": "5ce8d8e9-ed56-472b-ae70-32a7460d8dff",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1968,
+        96
+      ],
+      "id": "f4c63a8a-1203-4ece-a23d-27a10ae355ac",
+      "name": "Resposta do fluxo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resultados = ($json.resultados || []).slice(0, 2);\n\nfunction parseBRL(valor) {\n  if (!valor) return 0;\n\n  const s = String(valor)\n    .replace(\"R$\", \"\")\n    .replace(/\\./g, \"\")\n    .replace(\",\", \".\")\n    .replace(/[^\\d.]/g, \"\")\n    .trim();\n\n  const n = Number(s);\n\n  return Number.isFinite(n) ? n : 0;\n}\n\n// retorna UM ITEM por cliente\nconst out = resultados.map(c => {\n\n  const saldoNum =\n    c.saldo_num ??\n    parseBRL(c.saldo_texto ?? c.saldo);\n\n  return {\n    json: {\n\n      email: String(c.email || \"\").trim().toLowerCase(),\n\n      nome: String(c.nome || \"\").trim(),\n\n      perfil: c.perfil,\n\n      saldo_texto: c.saldo_texto ?? c.saldo,\n\n      saldo_num: saldoNum,\n\n      recomendacao: c.recomendacao,\n\n      motivo: c.motivo,\n\n      mensagem_base:\n        c.mensagem_escolhida ||\n        c.mensagem ||\n        \"\",\n\n      copy_rules: {\n        idioma: \"pt-BR\",\n\n        tom: \"amigável e profissional\",\n\n        tamanho: \"curto (4-6 linhas)\",\n\n        evitar: [\n          \"promessas de ganho\",\n          \"garantias\",\n          \"linguagem agressiva\"\n        ]\n      }\n    }\n  };\n});\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        96
+      ],
+      "id": "a0abb0ff-cba5-49c4-8618-d2a3c4b8f066",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um especialista em comunicação para clientes de investimentos.\n\nSua tarefa é criar um e-mail personalizado em português do Brasil para o cliente abaixo.\n\nCliente:\nNome: {{ $json.nome }}\nPerfil: {{ $json.perfil }}\nSaldo: {{ $json.saldo_texto }}\n\nRecomendação:\nProduto: {{ $json.recomendacao.produto }}\nMínimo: {{ $json.recomendacao.minimo }}\nRentabilidade: {{ $json.recomendacao.rentabilidade }}\nMotivo: {{ $json.recomendacao.motivo || $json.motivo }}\n\nMensagem base:\n{{ $json.mensagem_base }}\n\nRegras de escrita:\n- Utilizar português brasileiro.\n- Tom amigável e profissional.\n- Ser curto e objetivo (4 a 6 linhas).\n- Personalizar utilizando o nome do cliente.\n- Explicar a recomendação de forma simples.\n- Não prometer ganhos.\n- Não oferecer garantias de rentabilidade.\n- Não utilizar linguagem agressiva de vendas.\n- Incluir uma saudação inicial.\n- Incluir um encerramento cordial.\n- O assunto deve ser atrativo e profissional.\n- O html_body deve ser um HTML simples usando apenas tags como <p>, <strong> e <br>.\nIMPORTANTE:\n\nSua resposta deve conter exclusivamente um JSON válido.\n\nNão use markdown.\nNão use ```json.\nNão escreva explicações.\nNão escreva textos antes ou depois do JSON.\n\nRetorne exatamente neste formato:\n\n{\n  \"email\": {{ $json.email }}\n  \"subject\": \"assunto do email\",\n  \"text_body\": \"versão texto puro\",\n  \"html_body\": \"versão html\"\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1280,
+        96
+      ],
+      "id": "ef1e713b-c232-49b7-a91c-e8a47758654e",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "apodex/apodex-1.1-mini:free",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        304
+      ],
+      "id": "738ff3ce-1c39-4e9b-be89-0354b23b1354",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "ZuZY9iiovDVr8NIq",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n\n  let resposta = item.json.output || item.json.text || item.json.response || \"\";\n\n  // Remove markdown ```json ... ```\n  resposta = String(resposta)\n    .replace(/^```json\\s*/i, \"\")\n    .replace(/^```\\s*/i, \"\")\n    .replace(/\\s*```$/i, \"\")\n    .trim();\n\n  try {\n\n    const parsed = JSON.parse(resposta);\n\n    return {\n      json: {\n        ok: true,\n        to:  parsed.email || \"\",\n        subject: parsed.subject || \"\",\n        text_body: parsed.text_body || \"\",\n        html_body: parsed.html_body || \"\"\n      }\n    };\n\n  } catch (error) {\n\n    return {\n      json: {\n        ok: false,\n        to: item.json.email || \"\",\n        erro: \"JSON inválido retornado pela IA\",\n        resposta_original: resposta\n      }\n    };\n\n  }\n\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        96
+      ],
+      "id": "7531c158-d819-4fb7-9e8b-9f82a556adc2",
+      "name": "Code in JavaScript2"
+    }
+  ],
+  "pinData": {
+    "Dados clientes": [
+      {
+        "json": {
+          "headers": {
+            "host": "envision-unsubtly-cage.ngrok-free.dev",
+            "user-agent": "python-requests/2.32.4",
+            "content-length": "1047",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "content-type": "application/json",
+            "x-forwarded-for": "34.80.89.84",
+            "x-forwarded-host": "envision-unsubtly-cage.ngrok-free.dev",
+            "x-forwarded-proto": "https"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "clientes": [
+              {
+                "nome": "Ana Silva",
+                "email": "ana@email.com",
+                "saldo": "R$ 12.500,00",
+                "perfil": "Conservador"
+              },
+              {
+                "nome": "Bruno Lima",
+                "email": "bruno@email.com",
+                "saldo": "R$ 3.200,00",
+                "perfil": "Moderado"
+              },
+              {
+                "nome": "Carla Souza",
+                "email": "carla@email.com",
+                "saldo": "R$ 28.900,00",
+                "perfil": "Arrojado"
+              },
+              {
+                "nome": "Daniel Oliveira",
+                "email": "daniel@email.com",
+                "saldo": "R$ 850,00",
+                "perfil": "Conservador"
+              },
+              {
+                "nome": "Elena Rodrigues",
+                "email": "elena@email.com",
+                "saldo": "R$ 45.000,00",
+                "perfil": "Arrojado"
+              },
+              {
+                "nome": "Felipe Santos",
+                "email": "felipe@email.com",
+                "saldo": "R$ 7.800,00",
+                "perfil": "Moderado"
+              },
+              {
+                "nome": "Gabriela Costa",
+                "email": "gabriela@email.com",
+                "saldo": "R$ 1.500,00",
+                "perfil": "Conservador"
+              },
+              {
+                "nome": "Henrique Alves",
+                "email": "henrique@email.com",
+                "saldo": "R$ 22.300,00",
+                "perfil": "Moderado"
+              },
+              {
+                "nome": "Isabela Martins",
+                "email": "isabela@email.com",
+                "saldo": "R$ 500,00",
+                "perfil": "Conservador"
+              },
+              {
+                "nome": "João Pereira",
+                "email": "joao@email.com",
+                "saldo": "R$ 15.000,00",
+                "perfil": "Arrojado"
+              }
+            ]
+          },
+          "webhookUrl": "http://localhost:5678/webhook-test/clientes",
+          "executionMode": "test"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dados clientes": {
+      "main": [
+        [
+          {
+            "node": "Tipos Investimentos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipos Investimentos": {
+      "main": [
+        [
+          {
+            "node": "Json dos tipos de investimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Json dos tipos de investimento": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta do fluxo": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Resposta do fluxo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "30cdb952-1ed5-4668-94e0-29503bd0e1c3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f3803ba97557809e8cae4011c91d34c78f565ad2040219feb3685280ba4796bb"
+  },
+  "nodeGroups": [],
+  "id": "UaMTzydQLaXVbvf8",
+  "tags": []
+}
